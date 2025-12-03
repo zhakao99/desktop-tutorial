@@ -1,26 +1,45 @@
 #!/usr/bin/env python3
-from scapy.all import *  # Ether, LLC, sendp, Raw 等基础
-from scapy.contrib.gxrp import *  # GARP, GVRP, GARP_ATTRIBUTE
+from scapy.all import *
 
-# 常量
-GARP_DEST = "01:80:c2:00:00:21"
-MY_MAC    = "00:11:22:33:44:55"  # 改成你的 MAC，或用 get_if_hwaddr(iface)
+iface = "eth1"
+src_mac = get_if_hwaddr(iface)
 
-def send_gvrp_join(iface, vlans):
-    for vlan in vlans:
-        # 构造 PDU：LLC + GARP + GVRP + GARP_ATTRIBUTE + Raw(End Mark)
-        pkt = Ether(src=MY_MAC, dst=GARP_DEST) / \
-              LLC(dsap=0x42, ssap=0x42, ctrl=3) / \
-              GARP() / \                          # GARP 容器
-              GVRP(vlan=vlan) / \                 # GVRP VLAN 特定
-              GARP_ATTRIBUTE(event=2) / \         # 属性事件：2=JoinIn/JoinEmpty
-              Raw(load=b'\x00')                   # End Mark: 单字节 0x00
-        
-        sendp(pkt, iface=iface, verbose=0)
-        print(f"[+] Sent GVRP Join VLAN {vlan} on {iface}")
+def send_gvrp_join(vlan):
+    pkt = (
+        Ether(src=src_mac, dst="01:80:c2:00:00:21") /
+        LLC(dsap=0x42, ssap=0x42, ctrl=0x03) /
+        SNAP(OUI=0x000000, code=0x0001) /           # 必须加这一层！！！
+        Raw(load=(
+            b'\x00\x01' +                           # Protocol ID: 0x0001 (VLAN)
+            b'\x01' +                               # Attribute Type: 1 (VLAN)
+            b'\x05' +                               # Length: 5 (2字节VLAN + 3字节pad)
+            b'\x02' +                               # Event: 2 = JoinIn
+            vlan.to_bytes(2, 'big') +               # VLAN ID (big-endian)
+            b'\x00\x00\x00' +                       # Padding
+            b'\x00'                                 # End of Mark
+        ))
+    )
+    sendp(pkt, iface=iface, verbose=0)
+    print(f"[+] Join VLAN {vlan}")
 
-# 示例使用
-if __name__ == "__main__":
-    iface = "eth1"  # 你的接口
-    vlans_to_join = [10, 20, 100, 666]
-    send_gvrp_join(iface, vlans_to_join)
+def send_gvrp_leave(vlan):
+    pkt = (
+        Ether(src=src_mac, dst="01:80:c2:00:00:21") /
+        LLC(dsap=0x42, ssap=0x42, ctrl=0x03) /
+        SNAP(OUI=0x000000, code=0x0001) /
+        Raw(load=(
+            b'\x00\x01' +
+            b'\x01' +
+            b'\x05' +
+            b'\x00' +                               # Event: 0 = LeaveEmpty
+            vlan.to_bytes(2, 'big') +
+            b'\x00\x00\x00' +
+            b'\x00'
+        ))
+    )
+    sendp(pkt, iface=iface, verbose=0)
+    print(f"[-] Leave VLAN {vlan}")
+
+# 测试
+for v in [10, 20, 100]:
+    send_gvrp_join(v)
