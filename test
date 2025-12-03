@@ -1,32 +1,27 @@
+#!/usr/bin/env python3
 from scapy.all import *
 
-# 定义网卡接口
-interface = "eth0"  # 替换为你的网卡接口
+# 需要用到的两个关键 MAC 地址（标准保留地址）
+GARP_DEST = "01:80:c2:00:00:21"    # GVRP 的固定目的 MAC
+MY_MAC    = "00:11:22:33:44:55"    # 改成你自己的网卡 MAC
 
-# 构造以太网帧
-ether = Ether(
-    dst="01:80:c2:00:00:21",  # GVRP 多播地址
-    src="00:11:22:33:44:55"   # 替换为你的网卡 MAC 地址
-)
+# 构造 GVRP Join 消息（Attribute Type = 1 表示 VLAN）
+def send_gvrp_join(iface, vlans):
+    for vlan in vlans:
+        pkt = Ether(src=MY_MAC, dst=GARP_DEST)/ \
+              LLC(dsap=0x42, ssap=0x42, ctrl=3)/ \
+              GARP()/ \
+              GVRP()/ \
+              GVRPAttribute(event=2, value=vlan)   # event=2 表示 JoinIn / JoinEmpty
+        
+        # 结尾必须有 EndMark
+        pkt = pkt / GVRPEndMark()
+        
+        sendp(pkt, iface=iface, verbose=0)
+        print(f"[+] Sent GVRP Join VLAN {vlan} on {iface}")
 
-# 构造 802.1Q VLAN 标签（VLAN ID = 10）
-vlan = Dot1Q(vlan=10)
-
-# 构造 GVRP JoinEmpty 消息
-gvrp = Raw(load=bytes.fromhex(
-    "01" +      # 协议 ID (0x0001 for GVRP)
-    "02" +      # 消息类型：JoinEmpty (0x02)
-    "01" +      # 属性类型：VLAN (0x01)
-    "03" +      # 属性长度：3 字节
-    "000a" +    # VLAN ID：10 (0x000a)
-    "00"        # 结束标记
-))
-
-# 组合数据包
-packet = ether / vlan / gvrp
-
-# 显示数据包结构
-packet.show()
-
-# 发送数据包
-sendp(packet, iface=interface, verbose=True)
+# 使用示例
+if __name__ == "__main__":
+    iface = "eth1"                     # 改成你的物理口
+    vlans_to_join = [10, 20, 100, 666]
+    send_gvrp_join(iface, vlans_to_join)
