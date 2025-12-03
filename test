@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
-from scapy.all import *
+from scapy.all import *  # 保留基础层（如 Ether, LLC, sendp）
+from scapy.contrib.gxrp import *  # 加载 GARP/GVRP 扩展层
 
-# 需要用到的两个关键 MAC 地址（标准保留地址）
-GARP_DEST = "01:80:c2:00:00:21"    # GVRP 的固定目的 MAC
-MY_MAC    = "00:11:22:33:44:55"    # 改成你自己的网卡 MAC
+# GARP_DEST 等常量不变
+GARP_DEST = "01:80:c2:00:00:21"
+MY_MAC    = "00:11:22:33:44:55"  # 或用 get_if_hwaddr(iface)
 
-# 构造 GVRP Join 消息（Attribute Type = 1 表示 VLAN）
+# 你的原函数，现在能用了
 def send_gvrp_join(iface, vlans):
     for vlan in vlans:
         pkt = Ether(src=MY_MAC, dst=GARP_DEST)/ \
               LLC(dsap=0x42, ssap=0x42, ctrl=3)/ \
               GARP()/ \
               GVRP()/ \
-              GVRPAttribute(event=2, value=vlan)   # event=2 表示 JoinIn / JoinEmpty
+              GVRPAttribute(event=2, value=vlan)   # event=2: JoinIn/JoinEmpty
         
-        # 结尾必须有 EndMark
         pkt = pkt / GVRPEndMark()
-        
         sendp(pkt, iface=iface, verbose=0)
         print(f"[+] Sent GVRP Join VLAN {vlan} on {iface}")
 
-# 使用示例
+# 示例
 if __name__ == "__main__":
-    iface = "eth1"                     # 改成你的物理口
+    iface = "eth1"
     vlans_to_join = [10, 20, 100, 666]
     send_gvrp_join(iface, vlans_to_join)
