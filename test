@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from scapy.all import *  # Ether, LLC, sendp 等基础
-from scapy.contrib.gxrp import *  # GARP, GVRP, GARP_ATTRIBUTE, GVRP_END_MARK 等
+from scapy.all import *  # Ether, LLC, sendp, Raw 等基础
+from scapy.contrib.gxrp import *  # GARP, GVRP, GARP_ATTRIBUTE
 
 # 常量
 GARP_DEST = "01:80:c2:00:00:21"
@@ -8,13 +8,13 @@ MY_MAC    = "00:11:22:33:44:55"  # 改成你的 MAC，或用 get_if_hwaddr(iface
 
 def send_gvrp_join(iface, vlans):
     for vlan in vlans:
-        # 构造 PDU：LLC + GARP (容器) + GVRP (VLAN 层) + GARP_ATTRIBUTE (事件) + End Mark
+        # 构造 PDU：LLC + GARP + GVRP + GARP_ATTRIBUTE + Raw(End Mark)
         pkt = Ether(src=MY_MAC, dst=GARP_DEST) / \
               LLC(dsap=0x42, ssap=0x42, ctrl=3) / \
-              GARP() / \                          # GARP 消息容器
-              GVRP(vlan=vlan) / \                 # GVRP 特定：指定 VLAN ID
-              GARP_ATTRIBUTE(event=2) / \         # 属性：event=2 (JoinIn/JoinEmpty)
-              GVRP_END_MARK()                     # 结束标记（注意：是 GVRP_END_MARK，不是 GVRPEndMark）
+              GARP() / \                          # GARP 容器
+              GVRP(vlan=vlan) / \                 # GVRP VLAN 特定
+              GARP_ATTRIBUTE(event=2) / \         # 属性事件：2=JoinIn/JoinEmpty
+              Raw(load=b'\x00')                   # End Mark: 单字节 0x00
         
         sendp(pkt, iface=iface, verbose=0)
         print(f"[+] Sent GVRP Join VLAN {vlan} on {iface}")
